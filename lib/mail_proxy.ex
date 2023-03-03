@@ -1,0 +1,2 @@
+defmodule MailProxy do
+end
