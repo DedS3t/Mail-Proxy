@@ -2,7 +2,7 @@ children = [
   {
     MailProxy.Http,
     port: 8080
-  }
+  },
 ]
 
 opts = [strategy: :one_for_one, name: Http.Supervisor]

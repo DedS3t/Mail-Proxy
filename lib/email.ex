@@ -1,10 +1,12 @@
 defmodule MailProxy.Email do
   import Bamboo.Email
 
+  @from Application.fetch_env!(:mail_proxy, :from)
+
   def send_email(to, subject, data) do
     new_email(
       to: to,
-      from: "mailer@ezml.io",
+      from: @from,
       subject: subject,
       text_body: data
     ) |> MailProxy.Mailer.deliver_now()

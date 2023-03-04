@@ -1,7 +1,9 @@
+defmodule RateLimitError do
+  defexception message: "Rate Limit Error"
+end
+
 defmodule MailProxy.Http do
   require Logger
-
-  # TODO: add rate limiter
 
   @error_body "{\"status\": \"error\"}"
   @success_body "{\"status\": \"success\"}"
@@ -38,21 +40,13 @@ defmodule MailProxy.Http do
   #{@error_body}
   """
 
-  def start_link(port: port) do
-    {:ok, socket} = :gen_tcp.listen(port, active: false, packet: :http_bin, reuseaddr: true)
-    Logger.info("Accepting connections on port #{port}")
-
-    {:ok, spawn_link(MailProxy.Http, :accept, [socket])}
-  end
-
-  def get_content_length(sock) do
-    case sock |> :gen_tcp.recv(0) do
-      {:ok, {:http_header, _, "Content-Length", _, length}} -> length
-      _ -> get_content_length(sock)
-    end
-
-  end
-
+  @rate_limit """
+  HTTP/1.1 429\r
+  Content-Type: application/json\r
+  Content-Length: #{byte_size(@error_body)}\r
+  \r
+  #{@error_body}
+  """
   defp get_body_inner(sock) do
     :inet.setopts(sock, [{:packet, :raw}])
     {ok, body} = sock |> :gen_tcp.recv(0)
@@ -64,6 +58,28 @@ defmodule MailProxy.Http do
 
   defp extract_name(val) do
     val |> String.split("\"") |> Enum.at(1)
+  end
+
+  defp is_wildcard(ips) do
+    ips |> Enum.filter(&(&1 == "*")) |> length > 0
+  end
+
+  defp check_rate!(limiter), do: unless MailProxy.RateLimiter.allowed?(limiter), do: raise RateLimitError
+
+  def start_link(port: port) do
+    {:ok, socket} = :gen_tcp.listen(port, active: false, packet: :http_bin, reuseaddr: true)
+    Logger.info("Accepting connections on port #{port}")
+    rate = Application.fetch_env!(:mail_proxy, :rate)
+    {:ok, conn} = MailProxy.RateLimiter.start_link(rate)
+
+    {:ok, spawn_link(MailProxy.Http, :accept, [socket, conn])}
+  end
+
+  def get_content_length(sock) do
+    case sock |> :gen_tcp.recv(0) do
+      {:ok, {:http_header, _, "Content-Length", _, length}} -> length
+      _ -> get_content_length(sock)
+    end
   end
 
   def get_body(sock, n \\ 100) do
@@ -106,11 +122,6 @@ defmodule MailProxy.Http do
         send_response(sock, @bad_request)
       end
     end
-
-  end
-
-  defp is_wildcard(ips) do
-    ips |> Enum.filter(&(&1 == "*")) |> length > 0
   end
 
   def handle_method(sock, method) do
@@ -120,11 +131,12 @@ defmodule MailProxy.Http do
     end
   end
 
-  def accept(socket) do
+  def accept(socket, limiter) do
     {:ok, sock} = :gen_tcp.accept(socket)
 
     spawn(fn ->
       try do
+        check_rate!(limiter)
         ips = Application.fetch_env!(:mail_proxy, :whitelisted_ips)
         {:ok, {http_request, method, _path, _version}} = sock |> :gen_tcp.recv(0)
 
@@ -141,11 +153,15 @@ defmodule MailProxy.Http do
           handle_method(sock, method)
         end
       rescue
-        _ -> send_response(sock, @bad_request)
+        error in [RateLimitError] -> send_response(sock, @rate_limit)
+        err -> (fn ->
+          err |> IO.inspect()
+          send_response(sock, @bad_request)
+        end).()
       end
     end)
 
-    accept(socket)
+    accept(socket, limiter)
   end
 
   def send_response(socket, response) do
