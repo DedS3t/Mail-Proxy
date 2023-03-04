@@ -3,20 +3,39 @@ defmodule MailProxy.Http do
 
   # TODO: add rate limiter
 
+  @error_body "{\"status\": \"error\"}"
+  @success_body "{\"status\": \"success\"}"
+
   @error_response """
   HTTP/1.1 404\r
+  Content-Type: application/json\r
+  Content-Length: #{byte_size(@error_body)}\r
+  \r
+  #{@error_body}
   """
 
   @email_sent_response """
   HTTP/1.1 201\r
+  Content-Type: application/json\r
+  Content-Length: #{byte_size(@success_body)}\r
+  \r
+  #{@success_body}
   """
 
   @unauthorized """
   HTTP/1.1 401\r
+  Content-Type: application/json\r
+  Content-Length: #{byte_size(@error_body)}\r
+  \r
+  #{@error_body}
   """
 
   @bad_request """
   HTTP/1.1 400\r
+  Content-Type: application/json\r
+  Content-Length: #{byte_size(@error_body)}\r
+  \r
+  #{@error_body}
   """
 
   def start_link(port: port) do
@@ -105,20 +124,24 @@ defmodule MailProxy.Http do
     {:ok, sock} = :gen_tcp.accept(socket)
 
     spawn(fn ->
-      ips = Application.fetch_env!(:mail_proxy, :whitelisted_ips)
-      {:ok, {http_request, method, _path, _version}} = sock |> :gen_tcp.recv(0)
+      try do
+        ips = Application.fetch_env!(:mail_proxy, :whitelisted_ips)
+        {:ok, {http_request, method, _path, _version}} = sock |> :gen_tcp.recv(0)
 
-      if !is_wildcard(ips) do
-        {:ok, {_, _, _, _, ipStr}} = sock |> :gen_tcp.recv(0)
-        ip = ipStr |> String.split(":") |> Enum.at(0)
+        if !is_wildcard(ips) do
+          {:ok, {_, _, _, _, ipStr}} = sock |> :gen_tcp.recv(0)
+          ip = ipStr |> String.split(":") |> Enum.at(0)
 
-        if !(ips |> Enum.find(&(&1 == ip))) do
-          send_response(sock, @unauthorized)
+          if !(ips |> Enum.find(&(&1 == ip))) do
+            send_response(sock, @unauthorized)
+          else
+            handle_method(sock, method)
+          end
         else
           handle_method(sock, method)
         end
-      else
-        handle_method(sock, method)
+      rescue
+        _ -> send_response(sock, @bad_request)
       end
     end)
 
