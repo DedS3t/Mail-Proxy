@@ -10,6 +10,7 @@ defmodule MailProxy.Http do
 
   @error_response """
   HTTP/1.1 404\r
+  Access-Control-Allow-Origin: *
   Content-Type: application/json\r
   Content-Length: #{byte_size(@error_body)}\r
   \r
@@ -18,6 +19,7 @@ defmodule MailProxy.Http do
 
   @email_sent_response """
   HTTP/1.1 201\r
+  Access-Control-Allow-Origin: *
   Content-Type: application/json\r
   Content-Length: #{byte_size(@success_body)}\r
   \r
@@ -26,6 +28,7 @@ defmodule MailProxy.Http do
 
   @unauthorized """
   HTTP/1.1 401\r
+  Access-Control-Allow-Origin: *
   Content-Type: application/json\r
   Content-Length: #{byte_size(@error_body)}\r
   \r
@@ -34,6 +37,7 @@ defmodule MailProxy.Http do
 
   @bad_request """
   HTTP/1.1 400\r
+  Access-Control-Allow-Origin: *
   Content-Type: application/json\r
   Content-Length: #{byte_size(@error_body)}\r
   \r
@@ -42,6 +46,7 @@ defmodule MailProxy.Http do
 
   @rate_limit """
   HTTP/1.1 429\r
+  Access-Control-Allow-Origin: *
   Content-Type: application/json\r
   Content-Length: #{byte_size(@error_body)}\r
   \r
