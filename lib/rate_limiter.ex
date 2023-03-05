@@ -27,12 +27,12 @@ defmodule MailProxy.RateLimiter do
     else
       time = :os.system_time(:second)
       if time - state[:lastUpdated] > 60 do
-        {:reply, :ok, %{reqs: 1, lastUpdated: time}}
+        {:reply, :ok, %{reqs: 1, lastUpdated: time, rate: state[:rate]}}
       else
-        if state[:reqs] >= 1 do
-          {:reply, :error, Map.put(state, :lastUpdated, time)}
+        if state[:reqs] >= state[:rate] do
+          {:reply, :error, state}
         else
-          {:reply, :ok, %{reqs: state[:reqs] + 1, lastUpdated: time}}
+          {:reply, :ok, Map.put(state, :reqs, state[:reqs] + 1)}
         end
       end
     end

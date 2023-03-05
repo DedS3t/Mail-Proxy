@@ -3,7 +3,7 @@ import Config
 config :mail_proxy,
   whitelisted_ips: ["*"], # wildcard
   from: "mailer@ezml.io",
-  rate: 1 # Amount of emails allowed per minute. 0 for no rate limiting
+  rate: 5 # Amount of emails allowed per minute. 0 for no rate limiting
 
 # Bamboo config
 config :mail_proxy, MailProxy.Mailer,
